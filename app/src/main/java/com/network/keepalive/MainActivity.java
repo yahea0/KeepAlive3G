@@ -8,50 +8,115 @@ import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 
-public class MainActivity extends AppCompatActivity {
-    private boolean isServiceActive = false;
-    private TextView tvStatus;
+import java.util.LinkedList;
+
+public class MainActivity extends AppCompatActivity implements KeepAliveService.NetworkStatsCallback {
+    private boolean isRunning = false;
+
+    private TextView tvSentCount, tvRecvCount, tvSpeed, tvConsole;
+    private EditText etInterval, etPacketSize, etTargetIp;
     private Button btnToggle;
+    private ScrollView scrollConsole;
+
+    private final LinkedList<String> logsBuffer = new LinkedList<>();
+    private static final int MAX_LOG_LINES = 40;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        tvStatus = findViewById(R.id.tvStatus);
+        tvSentCount = findViewById(R.id.tvSentCount);
+        tvRecvCount = findViewById(R.id.tvRecvCount);
+        tvSpeed = findViewById(R.id.tvSpeed);
+        tvConsole = findViewById(R.id.tvConsole);
+        scrollConsole = findViewById(R.id.scrollConsole);
+
+        etInterval = findViewById(R.id.etInterval);
+        etPacketSize = findViewById(R.id.etPacketSize);
+        etTargetIp = findViewById(R.id.etTargetIp);
         btnToggle = findViewById(R.id.btnToggle);
 
-        // طلب استثناء التطبيق من تحسينات البطارية (ضروري لمنع قتل الخدمة)
         requestBatteryIgnore();
 
-        // طلب إذن الإشعارات لأندرويد 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 101);
         }
 
         btnToggle.setOnClickListener(v -> {
             Intent serviceIntent = new Intent(this, KeepAliveService.class);
-            if (!isServiceActive) {
+            if (!isRunning) {
+                int interval = 1;
+                int size = 64;
+                try {
+                    interval = Integer.parseInt(etInterval.getText().toString().trim());
+                    size = Integer.parseInt(etPacketSize.getText().toString().trim());
+                } catch (Exception ignored) {}
+
+                String target = etTargetIp.getText().toString().trim();
+                if (target.isEmpty()) target = "1.1.1.1";
+
+                serviceIntent.putExtra("interval", interval);
+                serviceIntent.putExtra("size", size);
+                serviceIntent.putExtra("target", target);
+
+                KeepAliveService.callback = this;
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     startForegroundService(serviceIntent);
                 } else {
                     startService(serviceIntent);
                 }
-                isServiceActive = true;
-                tvStatus.setText("الحالة: يعمل ويحافظ على 3G+");
-                tvStatus.setTextColor(0xFF00AA00);
-                btnToggle.setText("إيقاف الخدمة");
+
+                isRunning = true;
+                btnToggle.setText("إيقاف الحاقن");
+                btnToggle.setBackgroundColor(0xFFD50000);
+                appendLog("[SYSTEM] تم بدء الحقن بسرعة: " + interval + "ms | الحجم: " + size + "B");
             } else {
                 stopService(serviceIntent);
-                isServiceActive = false;
-                tvStatus.setText("الحالة: متوقف");
-                tvStatus.setTextColor(0xFFFF0000);
-                btnToggle.setText("تشغيل التثبيت على 3G+");
+                KeepAliveService.callback = null;
+                isRunning = false;
+                btnToggle.setText("بدء الحقن والاتصال التوربيني");
+                btnToggle.setBackgroundColor(0xFF00C853);
+                appendLog("[SYSTEM] تم إيقاف الخدمة.");
             }
         });
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        KeepAliveService.callback = this;
+    }
+
+    @Override
+    public void onUpdate(long sent, long recv, int pps, String logLine) {
+        runOnUiThread(() -> {
+            tvSentCount.setText(String.valueOf(sent));
+            tvRecvCount.setText(String.valueOf(recv));
+            tvSpeed.setText(pps + " pps");
+
+            if (logLine != null) {
+                appendLog(logLine);
+            }
+        });
+    }
+
+    private void appendLog(String line) {
+        logsBuffer.add(line);
+        if (logsBuffer.size() > MAX_LOG_LINES) {
+            logsBuffer.removeFirst();
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String l : logsBuffer) {
+            sb.append(l).append("\n");
+        }
+        tvConsole.setText(sb.toString());
+        scrollConsole.post(() -> scrollConsole.fullScroll(ScrollView.FOCUS_DOWN));
     }
 
     private void requestBatteryIgnore() {
