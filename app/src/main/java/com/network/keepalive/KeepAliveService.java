@@ -13,32 +13,56 @@ import androidx.core.app.NotificationCompat;
 
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.HttpURLConnection;
 import java.net.InetAddress;
-import java.net.URL;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 public class KeepAliveService extends Service {
     private static final String CHANNEL_ID = "3g_keepalive_channel";
     private PowerManager.WakeLock wakeLock;
-    private boolean isRunning = false;
-    private Thread workerThread;
-    private long packetsSent = 0;
+    private volatile boolean isRunning = false;
+
+    private Thread txThread;
+    private Thread rxThread;
+    private DatagramSocket socket;
+
+    private long sentCount = 0;
+    private long recvCount = 0;
+    private int currentPps = 0;
+
+    // واجهة للتواصل اللحظي مع الشاشة
+    public interface NetworkStatsCallback {
+        void onUpdate(long sent, long recv, int pps, String logLine);
+    }
+    public static NetworkStatsCallback callback = null;
 
     @Override
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
 
-        // حجز WakeLock لضمان عدم نوم المعالج عند قفل شاشة الهاتف
-        PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
-        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "KeepAlive::Lock");
-        wakeLock.acquire();
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        if (pm != null) {
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "KeepAlive::TurboLock");
+            wakeLock.acquire();
+        }
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Notification notification = buildNotification("يعمل الآن: تثبيت 3G+ نشط");
-        
+        int intervalMs = 1;
+        int packetSize = 64;
+        String targetIp = "1.1.1.1";
+
+        if (intent != null) {
+            intervalMs = Math.max(1, intent.getIntExtra("interval", 1));
+            packetSize = Math.max(16, intent.getIntExtra("size", 64));
+            String ip = intent.getStringExtra("target");
+            if (ip != null && !ip.isEmpty()) targetIp = ip;
+        }
+
+        Notification notification = buildNotification("محرك 3G+ التوربيني يعمل بنبض " + intervalMs + "ms");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
         } else {
@@ -47,60 +71,96 @@ public class KeepAliveService extends Service {
 
         if (!isRunning) {
             isRunning = true;
-            startTrafficLoop();
+            startTurboEngine(targetIp, packetSize, intervalMs);
         }
 
-        return START_STICKY; // إعادة تشغيل الخدمة تلقائياً إذا حاول النظام إغلاقها
+        return START_STICKY;
     }
 
-    private void startTrafficLoop() {
-        workerThread = new Thread(() -> {
-            byte[] dummyData = "PING_3G_PLUS_KEEPALIVE".getBytes();
-            while (isRunning) {
-                try {
-                    // 1. إرسال حزمة UDP سريعة جداً تمنع برج الاتصال من خفض التردد
-                    DatagramSocket socket = new DatagramSocket();
-                    InetAddress address = InetAddress.getByName("1.1.1.1");
-                    DatagramPacket packet = new DatagramPacket(dummyData, dummyData.length, address, 53);
+    private void startTurboEngine(String targetIp, int packetSize, int intervalMs) {
+        sentCount = 0;
+        recvCount = 0;
+
+        txThread = new Thread(() -> {
+            byte[] sendPayload = new byte[packetSize];
+            for (int i = 0; i < packetSize; i++) sendPayload[i] = (byte) (i % 128);
+
+            long lastPpsCheck = System.currentTimeMillis();
+            long packetsInLastSec = 0;
+            SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss.SSS", Locale.US);
+
+            try {
+                socket = new DatagramSocket();
+                socket.setSoTimeout(100);
+                InetAddress address = InetAddress.getByName(targetIp);
+
+                // مسار استقبال الردود (RX Thread)
+                startReceiverThread();
+
+                while (isRunning) {
+                    DatagramPacket packet = new DatagramPacket(sendPayload, sendPayload.length, address, 53);
                     socket.send(packet);
-                    socket.close();
+                    sentCount++;
+                    packetsInLastSec++;
 
-                    packetsSent++;
-
-                    // 2. فحص HTTP صغير كل 5 حزم لتأكيد تدفق الـ TCP
-                    if (packetsSent % 5 == 0) {
-                        URL url = new URL("http://clients3.google.com/generate_204");
-                        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                        conn.setConnectTimeout(1500);
-                        conn.setReadTimeout(1500);
-                        conn.setRequestMethod("HEAD");
-                        conn.getResponseCode();
-                        conn.disconnect();
+                    long now = System.currentTimeMillis();
+                    if (now - lastPpsCheck >= 1000) {
+                        currentPps = (int) packetsInLastSec;
+                        packetsInLastSec = 0;
+                        lastPpsCheck = now;
                     }
 
-                    // تحديث الإشعار بعدد الحزم
-                    if (packetsSent % 10 == 0) {
-                        Notification updated = buildNotification("حزم البيانات المرسلة: " + packetsSent + " | الشبكة نشطة");
-                        NotificationManager manager = getSystemService(NotificationManager.class);
-                        if (manager != null) manager.notify(1, updated);
+                    // إرسال السجل إلى الواجهة
+                    if (sentCount % (intervalMs <= 5 ? 100 : 5) == 0) {
+                        if (callback != null) {
+                            String log = "[" + sdf.format(new Date()) + "] TX: " + packetSize + "B -> " + targetIp + " (Total: " + sentCount + ")";
+                            callback.onUpdate(sentCount, recvCount, currentPps, log);
+                        }
                     }
 
-                    // فاصل زمني 1.5 ثانية (التوقيت الذهبي لمنع خفض RRC إلى FACH)
-                    Thread.sleep(1500);
-
-                } catch (Exception e) {
-                    try {
-                        Thread.sleep(2000);
-                    } catch (InterruptedException ignored) {}
+                    if (intervalMs > 0) {
+                        try {
+                            Thread.sleep(intervalMs);
+                        } catch (InterruptedException e) {
+                            break;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                if (callback != null) {
+                    callback.onUpdate(sentCount, recvCount, currentPps, "[ERROR] " + e.getMessage());
                 }
             }
         });
-        workerThread.start();
+        txThread.setPriority(Thread.MAX_PRIORITY);
+        txThread.start();
+    }
+
+    private void startReceiverThread() {
+        rxThread = new Thread(() -> {
+            byte[] buffer = new byte[2048];
+            SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss.SSS", Locale.US);
+            while (isRunning && socket != null && !socket.isClosed()) {
+                try {
+                    DatagramPacket recvPacket = new DatagramPacket(buffer, buffer.length);
+                    socket.receive(recvPacket);
+                    recvCount++;
+
+                    if (callback != null) {
+                        String log = "[" + sdf.format(new Date()) + "] RX: " + recvPacket.getLength() + "B <- " + recvPacket.getAddress().getHostAddress();
+                        callback.onUpdate(sentCount, recvCount, currentPps, log);
+                    }
+                } catch (Exception ignored) {
+                    // Socket timeout طبيعي لضمان عدم تجميد مسار الاستقبال
+                }
+            }
+        });
+        rxThread.start();
     }
 
     private Notification buildNotification(String text) {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("3G+ Keep-Alive Service")
+                .setContentTitle("3G+ Turbo Engine")
                 .setContentText(text)
                 .setSmallIcon(android.R.drawable.stat_notify_sync)
                 .setOngoing(true)
@@ -112,7 +172,7 @@ public class KeepAliveService extends Service {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
-                    "3G KeepAlive Background",
+                    "3G Turbo Channel",
                     NotificationManager.IMPORTANCE_LOW
             );
             NotificationManager manager = getSystemService(NotificationManager.class);
@@ -123,8 +183,13 @@ public class KeepAliveService extends Service {
     @Override
     public void onDestroy() {
         isRunning = false;
-        if (workerThread != null) workerThread.interrupt();
+        if (socket != null && !socket.isClosed()) {
+            socket.close();
+        }
+        if (txThread != null) txThread.interrupt();
+        if (rxThread != null) rxThread.interrupt();
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+        callback = null;
         super.onDestroy();
     }
 
