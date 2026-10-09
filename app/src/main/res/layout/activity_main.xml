@@ -1,34 +1,215 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:gravity="center"
-    android:orientation="vertical"
-    android:padding="24dp">
+    android:background="#121212"
+    android:fillViewport="true">
 
-    <TextView
-        android:id="@+id/tvTitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="3G+ Force and KeepAlive"
-        android:textSize="22sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="16dp" />
-
-    <TextView
-        android:id="@+id/tvStatus"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="الحالة: متوقف"
-        android:textSize="18sp"
-        android:textColor="#FF0000"
-        android:layout_marginBottom="32dp" />
-
-    <Button
-        android:id="@+id/btnToggle"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="60dp"
-        android:text="تشغيل التثبيت على 3G+"
-        android:textSize="18sp" />
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
 
-</LinearLayout>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="3G+ Turbo Injector"
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="12dp" />
+
+        <!-- لوحة العدادات المباشرة -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:weightSum="3"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="#1E1E1E"
+                android:padding="8dp"
+                android:layout_marginEnd="4dp"
+                android:orientation="vertical"
+                android:gravity="center">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="إرسال TX"
+                    android:textColor="#AAAAAA"
+                    android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/tvSentCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0"
+                    android:textColor="#00E676"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="#1E1E1E"
+                android:padding="8dp"
+                android:layout_marginEnd="4dp"
+                android:orientation="vertical"
+                android:gravity="center">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="استقبال RX"
+                    android:textColor="#AAAAAA"
+                    android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/tvRecvCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0"
+                    android:textColor="#2979FF"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="#1E1E1E"
+                android:padding="8dp"
+                android:orientation="vertical"
+                android:gravity="center">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="معدل النبض"
+                    android:textColor="#AAAAAA"
+                    android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/tvSpeed"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0 pps"
+                    android:textColor="#FFD600"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- قسم الإعدادات المتقدمة -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#1E1E1E"
+            android:padding="12dp"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="إعدادات الحاقن الشبكي"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="الفاصل الزمني (ملي ثانية - ضع 1 لأقصى سرعة):"
+                android:textColor="#CCCCCC"
+                android:textSize="12sp" />
+            <EditText
+                android:id="@+id/etInterval"
+                android:layout_width="match_parent"
+                android:layout_height="45dp"
+                android:inputType="number"
+                android:text="1"
+                android:textColor="#FFFFFF"
+                android:background="#2C2C2C"
+                android:padding="8dp"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="حجم الحزمة (بايت):"
+                android:textColor="#CCCCCC"
+                android:textSize="12sp" />
+            <EditText
+                android:id="@+id/etPacketSize"
+                android:layout_width="match_parent"
+                android:layout_height="45dp"
+                android:inputType="number"
+                android:text="64"
+                android:textColor="#FFFFFF"
+                android:background="#2C2C2C"
+                android:padding="8dp"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="عنوان الهدف (Target IP / Router Gateway):"
+                android:textColor="#CCCCCC"
+                android:textSize="12sp" />
+            <EditText
+                android:id="@+id/etTargetIp"
+                android:layout_width="match_parent"
+                android:layout_height="45dp"
+                android:inputType="text"
+                android:text="1.1.1.1"
+                android:textColor="#FFFFFF"
+                android:background="#2C2C2C"
+                android:padding="8dp" />
+        </LinearLayout>
+
+        <!-- زر التشغيل / الإيقاف -->
+        <Button
+            android:id="@+id/btnToggle"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:text="بدء الحقن والاتصال التوربيني"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:backgroundTint="#00C853"
+            android:textColor="#FFFFFF"
+            android:layout_marginBottom="12dp" />
+
+        <!-- شاشة السجل الحي Terminal -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="سجل البيانات الحي (Live Console Log):"
+            android:textColor="#AAAAAA"
+            android:textSize="12sp"
+            android:layout_marginBottom="4dp" />
+
+        <ScrollView
+            android:id="@+id/scrollConsole"
+            android:layout_width="match_parent"
+            android:layout_height="180dp"
+            android:background="#000000"
+            android:padding="8dp">
+
+            <TextView
+                android:id="@+id/tvConsole"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="-- بانتظار بدء الخدمة --\n"
+                android:textColor="#00FF66"
+                android:typeface="monospace"
+                android:textSize="11sp" />
+        </ScrollView>
+
+    </LinearLayout>
+</ScrollView>
